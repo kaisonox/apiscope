@@ -82,13 +82,13 @@ counts) that redraws in place; control it with `--status auto|always|never`.
     file_handle    : 0x000000000000008C
     length         : 16
     buffer_ascii   : Hello, ApiScope!
-    result         : 0x00000000
+    result         : STATUS_SUCCESS (0x00000000)
 ```
 
 JSONL events contain generic metadata and hook-local fields:
 
 ```json
-{"schema_version":1,"sequence":1,"module":"bcrypt.dll","api":"BCryptOpenAlgorithmProvider","hook":"bcrypt.dll!BCryptOpenAlgorithmProvider","fields":{"flags":0,"result":"0x00000000"}}
+{"schema_version":1,"sequence":1,"module":"bcrypt.dll","api":"BCryptOpenAlgorithmProvider","hook":"bcrypt.dll!BCryptOpenAlgorithmProvider","fields":{"flags":0,"result":"STATUS_SUCCESS (0x00000000)"}}
 ```
 
 See [SCHEMA.md](docs/SCHEMA.md) for the event envelope and per-type field
@@ -114,13 +114,13 @@ seen `root_directory` handle.
     sequence          : 2
     path              : test_file.txt
     file_handle       : 0x000000000000008C
-    result            : 0x00000000
+    result            : STATUS_SUCCESS (0x00000000)
 
 [*] ntdll.dll!NtReadFile ----------
     sequence       : 3
     file_handle    : 0x000000000000008C
     buffer_ascii   : Hello, ApiScope!
-    result         : 0x00000000
+    result         : STATUS_SUCCESS (0x00000000)
     path           : test_file.txt
 ```
 

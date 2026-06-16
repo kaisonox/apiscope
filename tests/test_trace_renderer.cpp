@@ -153,18 +153,20 @@ int main() {
     InitializeTraceEvent(&reprEvent, "ntdll.dll", "NtCreateFile");
     AddTracePointer(&reprEvent, "file_handle", (PVOID)0x8C);
     AddTraceStatus(&reprEvent, "result", (NTSTATUS)0xC0000022L);
+    AddTraceStatus(&reprEvent, "result2", (NTSTATUS)0x0000DEADL);
     std::ostringstream reprJson;
     RenderTraceEventJsonl(reprJson, reprEvent);
     if (reprJson.str().find("\"schema_version\":1") == std::string::npos ||
         reprJson.str().find("\"file_handle\":\"0x000000000000008C\"") == std::string::npos ||
-        reprJson.str().find("\"result\":\"0xC0000022\"") == std::string::npos) {
+        reprJson.str().find("\"result\":\"STATUS_ACCESS_DENIED (0xC0000022)\"") == std::string::npos ||
+        reprJson.str().find("\"result2\":\"0x0000DEAD\"") == std::string::npos) {
         printf("Pointer/status/schema JSON encoding was incorrect\n");
         return 1;
     }
     std::ostringstream reprText;
     RenderTraceEventText(reprText, reprEvent);
     if (reprText.str().find("0x000000000000008C") == std::string::npos ||
-        reprText.str().find(": 0xC0000022") == std::string::npos) {
+        reprText.str().find("STATUS_ACCESS_DENIED (0xC0000022)") == std::string::npos) {
         printf("Pointer/status text encoding was incorrect\n");
         return 1;
     }

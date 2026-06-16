@@ -35,13 +35,14 @@ the same information; only the presentation differs.
 | int32 / int64 | decimal | number |
 | boolean | `true` / `false` | `true` / `false` |
 | pointer / handle | `0x` + 16 hex digits | string, `0x` + 16 hex digits |
-| status (NTSTATUS) | `0x` + 8 hex digits | string, `0x` + 8 hex digits |
+| status (NTSTATUS) | `NAME (0xHEX)` or `0xHEX` | string, `NAME (0xHEX)` or `0xHEX` |
 | wide string | UTF-8 text | string (UTF-8) |
 | bytes | parallel lines (see below) | object (see below) |
 
-Pointers and statuses are hex **strings** in JSON, not numbers, so 64-bit values
-stay exact in parsers that use doubles and read the way Windows developers
-expect (`0xC0000022`).
+Pointers and statuses are **strings** in JSON, not numbers, so 64-bit values
+stay exact in parsers that use doubles. A status renders with its symbolic name
+when known (e.g. `STATUS_OBJECT_NAME_NOT_FOUND (0xC0000034)`) and falls back to
+bare hex (`0xC0000034`) otherwise.
 
 ## Bytes fields
 
@@ -55,7 +56,7 @@ JSON:
   "type": "bytes",
   "requested": 4096,
   "captured": 64,
-  "status": "0x00000000",
+  "status": "STATUS_SUCCESS (0x00000000)",
   "hex": "48656C6C6F",
   "ascii": "Hello"
 }
@@ -67,7 +68,7 @@ Text (suffixes mirror the JSON keys):
     buffer_hex    : 48 65 6C 6C 6F ...
     buffer_ascii  : Hello...
     buffer_size   : 64 of 4096 bytes
-    buffer_status : 0x00000000
+    buffer_status : STATUS_SUCCESS (0x00000000)
 ```
 
 - `requested` is the caller's length; `captured` is how many bytes were safely

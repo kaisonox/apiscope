@@ -37,6 +37,46 @@ static std::string FormatPointer(uint64_t pointer) {
     return value.str();
 }
 
+static const char* StatusName(NTSTATUS status) {
+    switch ((uint32_t)status) {
+    case 0x00000000: return "STATUS_SUCCESS";
+    case 0x00000103: return "STATUS_PENDING";
+    case 0x00000104: return "STATUS_REPARSE";
+    case 0x00000105: return "STATUS_MORE_ENTRIES";
+    case 0x40000000: return "STATUS_OBJECT_NAME_EXISTS";
+    case 0x80000005: return "STATUS_BUFFER_OVERFLOW";
+    case 0x8000000D: return "STATUS_PARTIAL_COPY";
+    case 0x8000001A: return "STATUS_NO_MORE_ENTRIES";
+    case 0xC0000001: return "STATUS_UNSUCCESSFUL";
+    case 0xC0000002: return "STATUS_NOT_IMPLEMENTED";
+    case 0xC0000008: return "STATUS_INVALID_HANDLE";
+    case 0xC000000D: return "STATUS_INVALID_PARAMETER";
+    case 0xC000000F: return "STATUS_NO_SUCH_FILE";
+    case 0xC0000011: return "STATUS_END_OF_FILE";
+    case 0xC0000022: return "STATUS_ACCESS_DENIED";
+    case 0xC0000023: return "STATUS_BUFFER_TOO_SMALL";
+    case 0xC0000034: return "STATUS_OBJECT_NAME_NOT_FOUND";
+    case 0xC0000035: return "STATUS_OBJECT_NAME_COLLISION";
+    case 0xC000003A: return "STATUS_OBJECT_PATH_NOT_FOUND";
+    case 0xC0000043: return "STATUS_SHARING_VIOLATION";
+    case 0xC0000061: return "STATUS_PRIVILEGE_NOT_HELD";
+    case 0xC00000BA: return "STATUS_FILE_IS_A_DIRECTORY";
+    case 0xC0000103: return "STATUS_NOT_A_DIRECTORY";
+    case 0xC0000120: return "STATUS_CANCELLED";
+    case 0xC0000225: return "STATUS_NOT_FOUND";
+    default: return nullptr;
+    }
+}
+
+static std::string FormatStatus(NTSTATUS status) {
+    const char* name = StatusName(status);
+    std::string hex = HexStatus(status);
+    if (name != nullptr) {
+        return std::string(name) + " (" + hex + ")";
+    }
+    return hex;
+}
+
 static std::string FormatTimestamp(uint64_t timestamp100ns) {
     if (timestamp100ns == 0) {
         return "unavailable";
@@ -345,7 +385,7 @@ static void RenderBytesText(std::ostream& output, const TraceFieldView& field, s
 
     RenderTextLabel(output, field.name + "_status", labelWidth);
     PutColor(output, useColor, bytes.captureStatus >= 0 ? kColorOk : kColorError);
-    output << HexStatus(bytes.captureStatus);
+    output << FormatStatus(bytes.captureStatus);
     PutColor(output, useColor, kColorReset);
     output << "\n";
 }
@@ -411,7 +451,7 @@ void RenderTraceEventText(std::ostream& output, const TraceEvent& event, bool us
         case TraceFieldStatus: {
             NTSTATUS status = (NTSTATUS)ReadUInt32(field.value);
             PutColor(output, useColor, status >= 0 ? kColorOk : kColorError);
-            output << HexStatus(status);
+            output << FormatStatus(status);
             PutColor(output, useColor, kColorReset);
             break;
         }
@@ -484,7 +524,7 @@ void RenderTraceEventJsonl(std::ostream& output, const TraceEvent& event) {
             output << (*field.value ? "true" : "false");
             break;
         case TraceFieldStatus:
-            output << "\"" << HexStatus((NTSTATUS)ReadUInt32(field.value)) << "\"";
+            output << "\"" << FormatStatus((NTSTATUS)ReadUInt32(field.value)) << "\"";
             break;
         case TraceFieldWideString:
             output << "\"" << JsonEscape(WideToUtf8(field.value, field.header.valueSize)) << "\"";
@@ -494,7 +534,7 @@ void RenderTraceEventJsonl(std::ostream& output, const TraceEvent& event) {
             const BYTE* preview = field.value + sizeof(bytes);
             output << "{\"type\":\"bytes\",\"requested\":" << bytes.requested
                    << ",\"captured\":" << bytes.captured
-                   << ",\"status\":\"" << HexStatus(bytes.captureStatus) << "\""
+                   << ",\"status\":\"" << FormatStatus(bytes.captureStatus) << "\""
                    << ",\"hex\":\"" << HexBytes(preview, bytes.captured, false) << "\""
                    << ",\"ascii\":\"" << JsonEscape(PreviewText(preview, bytes.captured)) << "\"}";
             break;
