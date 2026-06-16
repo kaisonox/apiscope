@@ -279,6 +279,7 @@ bool TraceSession::Start(
         EnableVtMode();
     }
     footerDrawn_ = false;
+    footerLine_.clear();
     stats_ = TraceStats();
     startTime_ = std::chrono::steady_clock::now();
     started_ = true;
@@ -539,13 +540,11 @@ void TraceSession::RenderEvent(const TraceEvent& event) {
     {
         std::lock_guard<std::mutex> lock(consoleMutex_);
         stats_.Record(hookName);
-        if (!quiet_ || footerEnabled_) {
+        if (!quiet_) {
             if (footerEnabled_) {
                 EraseFooter();
             }
-            if (!quiet_) {
-                RenderTraceEventText(std::cout, event, colorEnabled_);
-            }
+            RenderTraceEventText(std::cout, event, colorEnabled_);
             if (footerEnabled_) {
                 DrawFooter();
             }
@@ -611,29 +610,39 @@ void TraceSession::EraseFooter() {
     }
 }
 
-void TraceSession::DrawFooter() {
+void TraceSession::RebuildFooterLine() {
     if (localRing_) {
         stats_.dropped = (uint32_t)_InterlockedCompareExchange(&localRing_->droppedEvents, 0, 0);
     }
     double elapsed = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - startTime_).count();
     size_t width = ConsoleWidth();
-    std::string line = FormatStatusLine(stats_, elapsed, width);
-    if (colorEnabled_) {
-        if (width > line.size()) {
-            line.append(width - line.size(), ' ');
-        }
-        std::cout << "\x1b[7m" << line << "\x1b[0m" << std::flush;
-    } else {
-        std::cout << line << std::flush;
+    footerLine_ = FormatStatusLine(stats_, elapsed, width);
+    if (colorEnabled_ && width > footerLine_.size()) {
+        footerLine_.append(width - footerLine_.size(), ' ');
     }
+}
+
+void TraceSession::DrawFooter() {
+    if (footerLine_.empty()) {
+        RebuildFooterLine();
+    }
+    // Redraw in place: return to column 0, overwrite, then clear any trailing
+    // residue. Never blanks the line first, so the bar does not flicker.
+    std::cout << "\r";
+    if (colorEnabled_) {
+        std::cout << "\x1b[7m" << footerLine_ << "\x1b[0m";
+    } else {
+        std::cout << footerLine_;
+    }
+    std::cout << "\x1b[K" << std::flush;
     footerDrawn_ = true;
 }
 
 void TraceSession::FooterLoop() {
     while (WaitForSingleObject(stopEvent_, 250) == WAIT_TIMEOUT) {
         std::lock_guard<std::mutex> lock(consoleMutex_);
-        EraseFooter();
+        RebuildFooterLine();
         DrawFooter();
     }
 }

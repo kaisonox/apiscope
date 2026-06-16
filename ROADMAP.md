@@ -37,6 +37,8 @@
 ## Next
 
 - Path and API filters
+- Interactive session console to add or remove hooks on a live target
+- Configurable trace ring capacity or lossless mode to reduce dropped events
 - Metadata-rich hook registry for categories and default filters
 - Additional NT and Win32 APIs
 - Ordinal forwarder support

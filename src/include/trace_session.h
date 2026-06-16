@@ -60,6 +60,7 @@ private:
     void EnableVtMode();
     void DrawFooter();
     void EraseFooter();
+    void RebuildFooterLine();
     void FooterLoop();
     size_t ConsoleWidth();
     static std::string CurrentHookName(const TraceEvent& event);
@@ -91,6 +92,7 @@ private:
     bool summaryPrinted_;
     std::mutex consoleMutex_;
     std::thread footerThread_;
+    std::string footerLine_;
     RemoteTrampoline setEventBypass_;
     RemoteTrampoline readMemoryBypass_;
 };
