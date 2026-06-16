@@ -9,9 +9,14 @@ API and installs hooks before the debuggee continues from each event.
 
 Included hooks:
 
-- `ntdll.dll!NtCreateFile`
+- `ntdll.dll!NtCreateFile` (records the target path)
+- `ntdll.dll!NtOpenFile` (records the target path)
 - `ntdll.dll!NtReadFile`
 - `ntdll.dll!NtWriteFile`
+- `ntdll.dll!NtClose`
+- `ntdll.dll!NtOpenKey` (records the key path)
+- `ntdll.dll!NtSetValueKey`
+- `ntdll.dll!NtQueryValueKey`
 - `bcrypt.dll!BCryptOpenAlgorithmProvider`
 
 ## Demo
