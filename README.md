@@ -72,15 +72,18 @@ to a file. `--quiet` suppresses the terminal event mirror.
     sequence       : 3
     file_handle    : 0x000000000000008C
     length         : 16
-    buffer_text    : Hello, ApiScope!
+    buffer_ascii   : Hello, ApiScope!
     result         : 0x00000000
 ```
 
 JSONL events contain generic metadata and hook-local fields:
 
 ```json
-{"sequence":1,"module":"bcrypt.dll","api":"BCryptOpenAlgorithmProvider","hook":"bcrypt.dll!BCryptOpenAlgorithmProvider","fields":{"flags":0,"result":{"type":"status","value":0,"hex":"0x00000000"}}}
+{"schema_version":1,"sequence":1,"module":"bcrypt.dll","api":"BCryptOpenAlgorithmProvider","hook":"bcrypt.dll!BCryptOpenAlgorithmProvider","fields":{"flags":0,"result":"0x00000000"}}
 ```
+
+See [SCHEMA.md](docs/SCHEMA.md) for the event envelope and per-type field
+encodings (pointers and statuses render as `0x` hex strings).
 
 Press Ctrl+C or Ctrl+Break to restore active hooks, release remote
 instrumentation, and detach. The target continues running. On natural exit,
@@ -202,6 +205,7 @@ target pointers fail without crashing the hook.
 
 ```text
 cmake/                 Dependency configuration
+docs/                  Event schema and format reference
 scripts/               Validation and runtime smoke tests
 src/apiscope/          CLI, debugger, mapper, patcher, and renderer
 src/apiscope-hooks/    Import-free hook DLL and standalone hooks

@@ -18,6 +18,12 @@ static std::string HexStatus(NTSTATUS status) {
     return value.str();
 }
 
+static std::string FormatPointer(uint64_t pointer) {
+    std::ostringstream value;
+    value << "0x" << std::uppercase << std::hex << std::setw(16) << std::setfill('0') << pointer;
+    return value.str();
+}
+
 static std::string FormatTimestamp(uint64_t timestamp100ns) {
     if (timestamp100ns == 0) {
         return "unavailable";
@@ -102,6 +108,25 @@ static std::string PreviewText(const BYTE* bytes, size_t size) {
     return text;
 }
 
+static std::string WideToUtf8(const BYTE* value, size_t byteSize) {
+    if (byteSize < sizeof(wchar_t)) {
+        return "";
+    }
+
+    std::wstring wide(byteSize / sizeof(wchar_t), L'\0');
+    memcpy(&wide[0], value, wide.size() * sizeof(wchar_t));
+    int needed = WideCharToMultiByte(
+        CP_UTF8, 0, wide.c_str(), (int)wide.size(), nullptr, 0, nullptr, nullptr);
+    if (needed <= 0) {
+        return "";
+    }
+
+    std::string utf8((size_t)needed, '\0');
+    WideCharToMultiByte(
+        CP_UTF8, 0, wide.c_str(), (int)wide.size(), &utf8[0], needed, nullptr, nullptr);
+    return utf8;
+}
+
 static bool IsValidIdentifier(const BYTE* name, size_t length, bool moduleName) {
     size_t maximum = moduleName ? TRACE_MAX_MODULE_NAME_BYTES : TRACE_MAX_API_NAME_BYTES;
     if (length == 0 || length > maximum) {
@@ -160,6 +185,8 @@ static bool HasExpectedValueSize(uint8_t type, const BYTE* value, uint16_t value
             bytes.captured <= bytes.requested &&
             valueSize == sizeof(bytes) + bytes.captured;
     }
+    case TraceFieldWideString:
+        return (valueSize % 2) == 0 && valueSize <= TRACE_MAX_STRING_BYTES;
     default:
         return true;
     }
@@ -261,7 +288,7 @@ static size_t TextLabelWidth(const std::vector<TraceFieldView>& fields, const Tr
     for (const TraceFieldView& field : fields) {
         width = (std::max)(width, field.name.size());
         if (field.header.type == TraceFieldBytes) {
-            width = (std::max)(width, field.name.size() + strlen("_text"));
+            width = (std::max)(width, field.name.size() + strlen("_ascii"));
             width = (std::max)(width, field.name.size() + strlen("_status"));
         }
     }
@@ -276,6 +303,35 @@ static size_t TextLabelWidth(const std::vector<TraceFieldView>& fields, const Tr
 
 static void RenderTextLabel(std::ostream& output, const std::string& name, size_t width) {
     output << "    " << std::left << std::setw((int)width) << std::setfill(' ') << name << ": ";
+}
+
+// A captured byte buffer decomposes into parallel "<name>_hex", "<name>_ascii",
+// "<name>_size", and "<name>_status" lines. The suffixes mirror the JSON
+// sub-keys (see docs/SCHEMA.md) so the two formats stay aligned.
+static void RenderBytesText(std::ostream& output, const TraceFieldView& field, size_t labelWidth) {
+    TraceBytesHeader bytes = ReadBytesHeader(field.value);
+    const BYTE* preview = field.value + sizeof(bytes);
+    bool truncated = bytes.captured < bytes.requested;
+
+    RenderTextLabel(output, field.name + "_hex", labelWidth);
+    output << HexBytes(preview, bytes.captured, true);
+    if (truncated) {
+        output << " ...";
+    }
+    output << "\n";
+
+    RenderTextLabel(output, field.name + "_ascii", labelWidth);
+    output << PreviewText(preview, bytes.captured);
+    if (truncated) {
+        output << "...";
+    }
+    output << "\n";
+
+    RenderTextLabel(output, field.name + "_size", labelWidth);
+    output << bytes.captured << " of " << bytes.requested << " bytes\n";
+
+    RenderTextLabel(output, field.name + "_status", labelWidth);
+    output << HexStatus(bytes.captureStatus) << "\n";
 }
 
 bool IsValidTraceEvent(const TraceEvent& event, size_t bytesReceived) {
@@ -299,11 +355,14 @@ void RenderTraceEventText(std::ostream& output, const TraceEvent& event) {
     RenderTextLabel(output, "sequence", labelWidth);
     output << event.header.sequence << "\n";
     for (const TraceFieldView& field : fields) {
+        if (field.header.type == TraceFieldBytes) {
+            RenderBytesText(output, field, labelWidth);
+            continue;
+        }
         RenderTextLabel(output, field.name, labelWidth);
         switch (field.header.type) {
         case TraceFieldPointer:
-            output << "0x" << std::right << std::uppercase << std::hex << std::setw(16)
-                   << std::setfill('0') << ReadUInt64(field.value) << std::setfill(' ') << std::dec;
+            output << FormatPointer(ReadUInt64(field.value));
             break;
         case TraceFieldUInt32:
             output << ReadUInt32(field.value);
@@ -323,24 +382,9 @@ void RenderTraceEventText(std::ostream& output, const TraceEvent& event) {
         case TraceFieldStatus:
             output << HexStatus((NTSTATUS)ReadUInt32(field.value));
             break;
-        case TraceFieldBytes: {
-            TraceBytesHeader bytes = ReadBytesHeader(field.value);
-            const BYTE* preview = field.value + sizeof(bytes);
-            output << HexBytes(preview, bytes.captured, true);
-            if (bytes.captured < bytes.requested) {
-                output << " ...";
-            }
-            output << "\n";
-            RenderTextLabel(output, field.name + "_text", labelWidth);
-            output << PreviewText(preview, bytes.captured);
-            if (bytes.captured < bytes.requested) {
-                output << "...";
-            }
-            output << "\n";
-            RenderTextLabel(output, field.name + "_status", labelWidth);
-            output << HexStatus(bytes.captureStatus);
+        case TraceFieldWideString:
+            output << WideToUtf8(field.value, field.header.valueSize);
             break;
-        }
         default:
             output << "type_" << (uint32_t)field.header.type << " "
                    << HexBytes(field.value, field.header.valueSize, true);
@@ -367,7 +411,8 @@ void RenderTraceEventJsonl(std::ostream& output, const TraceEvent& event) {
         return;
     }
 
-    output << "{\"sequence\":" << event.header.sequence
+    output << "{\"schema_version\":" << TRACE_JSON_SCHEMA_VERSION
+           << ",\"sequence\":" << event.header.sequence
            << ",\"timestamp\":\"" << FormatTimestamp(event.header.timestamp100ns) << "\""
            << ",\"timestamp_100ns\":" << event.header.timestamp100ns
            << ",\"thread_id\":" << event.header.threadId
@@ -386,6 +431,8 @@ void RenderTraceEventJsonl(std::ostream& output, const TraceEvent& event) {
         output << "\"" << field.name << "\":";
         switch (field.header.type) {
         case TraceFieldPointer:
+            output << "\"" << FormatPointer(ReadUInt64(field.value)) << "\"";
+            break;
         case TraceFieldUInt64:
             output << ReadUInt64(field.value);
             break;
@@ -401,21 +448,20 @@ void RenderTraceEventJsonl(std::ostream& output, const TraceEvent& event) {
         case TraceFieldBoolean:
             output << (*field.value ? "true" : "false");
             break;
-        case TraceFieldStatus: {
-            NTSTATUS status = (NTSTATUS)ReadUInt32(field.value);
-            output << "{\"type\":\"status\",\"value\":" << (int32_t)status
-                   << ",\"hex\":\"" << HexStatus(status) << "\"}";
+        case TraceFieldStatus:
+            output << "\"" << HexStatus((NTSTATUS)ReadUInt32(field.value)) << "\"";
             break;
-        }
+        case TraceFieldWideString:
+            output << "\"" << JsonEscape(WideToUtf8(field.value, field.header.valueSize)) << "\"";
+            break;
         case TraceFieldBytes: {
             TraceBytesHeader bytes = ReadBytesHeader(field.value);
             const BYTE* preview = field.value + sizeof(bytes);
             output << "{\"type\":\"bytes\",\"requested\":" << bytes.requested
                    << ",\"captured\":" << bytes.captured
-                   << ",\"capture_status\":" << (int32_t)bytes.captureStatus
-                   << ",\"capture_status_hex\":\"" << HexStatus(bytes.captureStatus) << "\""
+                   << ",\"status\":\"" << HexStatus(bytes.captureStatus) << "\""
                    << ",\"hex\":\"" << HexBytes(preview, bytes.captured, false) << "\""
-                   << ",\"text\":\"" << JsonEscape(PreviewText(preview, bytes.captured)) << "\"}";
+                   << ",\"ascii\":\"" << JsonEscape(PreviewText(preview, bytes.captured)) << "\"}";
             break;
         }
         default:
