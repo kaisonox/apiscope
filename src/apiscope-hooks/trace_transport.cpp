@@ -9,6 +9,10 @@
 #pragma intrinsic(__readgsqword)
 
 static const NTSTATUS TRACE_STATUS_NOT_CONFIGURED = (NTSTATUS)0xC0000184L;
+static const NTSTATUS TRACE_STATUS_READ_FAILED = (NTSTATUS)0xC0000001L;
+
+static_assert(sizeof(UNICODE_STRING) == 16, "Unexpected x64 UNICODE_STRING layout");
+static_assert(sizeof(OBJECT_ATTRIBUTES) == 48, "Unexpected x64 OBJECT_ATTRIBUTES layout");
 
 extern "C" {
 __declspec(dllexport) TraceRing* TransportRing = nullptr;
@@ -218,6 +222,33 @@ bool AddTraceStatus(TraceEvent* event, const char* name, NTSTATUS value) {
     return AppendTraceField(event, TraceFieldStatus, name, &value, sizeof(value));
 }
 
+// Lowest-level guarded self-read: invokes the unpatched NtReadVirtualMemory
+// bypass and reports how many bytes were read. Never faults on a bad pointer.
+static NTSTATUS InvokeSelfRead(void* destination, const void* source, ULONG length, ULONG* captured) {
+    *captured = 0;
+    if (!TransportNtReadVirtualMemory || !destination || !source || length == 0) {
+        return TRACE_STATUS_NOT_CONFIGURED;
+    }
+
+    TransportNtReadVirtualMemoryProc readMemory =
+        reinterpret_cast<TransportNtReadVirtualMemoryProc>(TransportNtReadVirtualMemory);
+    return readMemory((HANDLE)-1, (PVOID)source, destination, length, captured);
+}
+
+// All-or-nothing read for fixed-size structures, where a partial read is
+// unusable. Best-effort previews use CaptureTraceBuffer instead.
+static NTSTATUS SafeReadSelf(void* destination, const void* source, ULONG length) {
+    ULONG captured = 0;
+    NTSTATUS status = InvokeSelfRead(destination, source, length, &captured);
+    if (NT_SUCCESS(status) && captured != length) {
+        return TRACE_STATUS_READ_FAILED;
+    }
+    return status;
+}
+
+// Best-effort preview: keeps whatever bytes were readable and records the real
+// captured count and raw status, so a buffer that straddles an unmapped page
+// still shows its readable prefix.
 static void CaptureTraceBuffer(TraceBytesValue* preview, const void* buffer, ULONG length) {
     if (!preview) {
         return;
@@ -230,21 +261,9 @@ static void CaptureTraceBuffer(TraceBytesValue* preview, const void* buffer, ULO
         return;
     }
 
-    if (!TransportNtReadVirtualMemory) {
-        preview->header.captureStatus = TRACE_STATUS_NOT_CONFIGURED;
-        return;
-    }
-
     ULONG captureLength = length < TRACE_MAX_BUFFER_BYTES ? length : (ULONG)TRACE_MAX_BUFFER_BYTES;
     ULONG captured = 0;
-    TransportNtReadVirtualMemoryProc readMemory =
-        reinterpret_cast<TransportNtReadVirtualMemoryProc>(TransportNtReadVirtualMemory);
-    preview->header.captureStatus = readMemory(
-        (HANDLE)-1,
-        (PVOID)buffer,
-        preview->bytes,
-        captureLength,
-        &captured);
+    preview->header.captureStatus = InvokeSelfRead(preview->bytes, buffer, captureLength, &captured);
     preview->header.captured = captured < captureLength ? captured : captureLength;
 }
 
@@ -253,6 +272,59 @@ bool AddTraceBufferPreview(TraceEvent* event, const char* name, const void* buff
     CaptureTraceBuffer(&preview, buffer, length);
     uint16_t valueSize = (uint16_t)(sizeof(preview.header) + preview.header.captured);
     return AppendTraceField(event, TraceFieldBytes, name, &preview, valueSize);
+}
+
+bool AddTraceWideString(TraceEvent* event, const char* name, const wchar_t* value, size_t charCount) {
+    wchar_t empty = 0;
+    if (!value) {
+        value = &empty;
+        charCount = 0;
+    }
+
+    size_t maxChars = TRACE_MAX_STRING_BYTES / sizeof(wchar_t);
+    if (charCount > maxChars) {
+        charCount = maxChars;
+        if (event) {
+            event->header.flags |= TraceEventFlagTruncated;
+        }
+    }
+    return AppendTraceField(
+        event, TraceFieldWideString, name, value, (uint16_t)(charCount * sizeof(wchar_t)));
+}
+
+bool AddTraceUnicodeString(TraceEvent* event, const char* name, const UNICODE_STRING* unicodeString) {
+    UNICODE_STRING header = {};
+    if (!unicodeString || !NT_SUCCESS(SafeReadSelf(&header, unicodeString, sizeof(header)))) {
+        return AddTraceWideString(event, name, nullptr, 0);
+    }
+
+    USHORT byteLength = header.Length & ~(USHORT)1;
+    if (byteLength > TRACE_MAX_STRING_BYTES) {
+        byteLength = (USHORT)TRACE_MAX_STRING_BYTES;
+        if (event) {
+            event->header.flags |= TraceEventFlagTruncated;
+        }
+    }
+
+    wchar_t buffer[TRACE_MAX_STRING_BYTES / sizeof(wchar_t)];
+    if (!header.Buffer || byteLength == 0 ||
+        !NT_SUCCESS(SafeReadSelf(buffer, header.Buffer, byteLength))) {
+        return AddTraceWideString(event, name, nullptr, 0);
+    }
+    return AddTraceWideString(event, name, buffer, byteLength / sizeof(wchar_t));
+}
+
+bool AddTraceObjectPath(TraceEvent* event, const char* name, const OBJECT_ATTRIBUTES* objectAttributes) {
+    OBJECT_ATTRIBUTES header = {};
+    if (!objectAttributes ||
+        !NT_SUCCESS(SafeReadSelf(&header, objectAttributes, sizeof(header)))) {
+        return AddTraceWideString(event, name, nullptr, 0);
+    }
+
+    if (header.RootDirectory) {
+        AddTracePointer(event, "root_directory", header.RootDirectory);
+    }
+    return AddTraceUnicodeString(event, name, header.ObjectName);
 }
 
 bool EmitTraceEvent(TraceEvent* event) {

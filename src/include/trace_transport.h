@@ -29,4 +29,7 @@ bool AddTraceInt64(TraceEvent* event, const char* name, int64_t value);
 bool AddTraceBoolean(TraceEvent* event, const char* name, bool value);
 bool AddTraceStatus(TraceEvent* event, const char* name, NTSTATUS value);
 bool AddTraceBufferPreview(TraceEvent* event, const char* name, const void* buffer, ULONG length);
+bool AddTraceWideString(TraceEvent* event, const char* name, const wchar_t* value, size_t charCount);
+bool AddTraceUnicodeString(TraceEvent* event, const char* name, const UNICODE_STRING* unicodeString);
+bool AddTraceObjectPath(TraceEvent* event, const char* name, const OBJECT_ATTRIBUTES* objectAttributes);
 bool EmitTraceEvent(TraceEvent* event);

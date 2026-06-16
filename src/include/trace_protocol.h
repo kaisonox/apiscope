@@ -4,12 +4,13 @@
 #include <stdint.h>
 
 static const uint32_t TRACE_EVENT_MAGIC = 0x53495041;
-static const uint16_t TRACE_EVENT_VERSION = 5;
+static const uint16_t TRACE_EVENT_VERSION = 6;
 static const size_t TRACE_MAX_EVENT_BYTES = 1024;
 static const size_t TRACE_MAX_MODULE_NAME_BYTES = 63;
 static const size_t TRACE_MAX_API_NAME_BYTES = 63;
 static const size_t TRACE_MAX_FIELD_NAME_BYTES = 63;
 static const size_t TRACE_MAX_BUFFER_BYTES = 64;
+static const size_t TRACE_MAX_STRING_BYTES = 512;
 
 enum TraceEventFlags : uint16_t {
     TraceEventFlagTruncated = 1 << 0,
@@ -25,6 +26,7 @@ enum TraceFieldType : uint8_t {
     TraceFieldInt32 = 6,
     TraceFieldInt64 = 7,
     TraceFieldBoolean = 8,
+    TraceFieldWideString = 9,
 };
 
 #pragma pack(push, 1)

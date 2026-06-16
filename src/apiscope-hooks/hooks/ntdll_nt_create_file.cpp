@@ -21,9 +21,8 @@ DEFINE_API_HOOK(
     HookCallGuard hookCall;
     TraceEvent event;
     InitializeTraceEvent(&event, "ntdll.dll", "NtCreateFile");
-    AddTracePointer(&event, "file_handle", FileHandle);
     AddTraceUInt32(&event, "desired_access", DesiredAccess);
-    AddTracePointer(&event, "object_attributes", ObjectAttributes);
+    AddTraceObjectPath(&event, "path", ObjectAttributes);
     AddTracePointer(&event, "io_status_block", IoStatusBlock);
     AddTracePointer(&event, "allocation_size", AllocationSize);
     AddTraceUInt32(&event, "file_attributes", FileAttributes);
@@ -46,6 +45,8 @@ DEFINE_API_HOOK(
         CreateOptions,
         EaBuffer,
         EaLength);
+    HANDLE openedHandle = (NT_SUCCESS(result) && FileHandle) ? *FileHandle : nullptr;
+    AddTracePointer(&event, "file_handle", openedHandle);
     AddTraceStatus(&event, "result", result);
     EmitTraceEvent(&event);
     return result;
