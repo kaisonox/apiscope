@@ -34,6 +34,15 @@
 - Generic trace protocol v5
 - `bcrypt.dll!BCryptOpenAlgorithmProvider` sample hook
 
+## v0.5.0: Paths, Correlation, And Live Output
+
+- File and registry path capture from `OBJECT_ATTRIBUTES`
+- Handle-to-path correlation across reads, writes, registry access, and close
+- `NtOpenFile`, `NtClose`, and registry key hooks (`NtOpenKey`, `NtSetValueKey`, `NtQueryValueKey`)
+- Normalized text and JSON field encodings with a versioned JSON schema
+- Human-readable NTSTATUS names, TTY color, a live status footer, and a session summary
+- Larger trace ring to reduce dropped events under bursty load
+
 ## Next
 
 - Path and API filters

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(ApiScope VERSION 0.4.0 LANGUAGES C CXX)
+project(ApiScope VERSION 0.5.0 LANGUAGES C CXX)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
