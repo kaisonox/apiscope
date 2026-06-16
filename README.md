@@ -70,7 +70,9 @@ export matching is case-sensitive.
 Terminal events remain readable while `--output` optionally tees text or JSONL
 to a file. `--quiet` suppresses the terminal event mirror. `--color
 auto|always|never` controls terminal color (default `auto`: on for a TTY, off
-when piped or under `NO_COLOR`); color never appears in `--output` files.
+when piped or under `NO_COLOR`); color never appears in `--output` files. On a
+TTY ApiScope also shows a live status footer (events, drops, rate, and per-hook
+counts) that redraws in place; control it with `--status auto|always|never`.
 
 ```text
 [*] ntdll.dll!NtWriteFile ----------

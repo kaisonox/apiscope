@@ -44,6 +44,8 @@ TraceSession::TraceSession()
       outputFormat_(TraceOutputFormat::Text),
       quiet_(false),
       colorEnabled_(false),
+      footerEnabled_(false),
+      footerDrawn_(false),
       reportedDroppedCount_(0),
       started_(false),
       summaryPrinted_(false),
@@ -271,9 +273,12 @@ bool TraceSession::Start(
     bool noColorEnv = getenv("NO_COLOR") != nullptr;
     colorEnabled_ = outputOptions.color == TraceColorMode::Always ||
         (outputOptions.color == TraceColorMode::Auto && stdoutTty && !noColorEnv);
-    if (colorEnabled_) {
+    footerEnabled_ = outputOptions.status == TraceColorMode::Always ||
+        (outputOptions.status == TraceColorMode::Auto && stdoutTty);
+    if (colorEnabled_ || footerEnabled_) {
         EnableVtMode();
     }
+    footerDrawn_ = false;
     stats_ = TraceStats();
     startTime_ = std::chrono::steady_clock::now();
     started_ = true;
@@ -313,6 +318,9 @@ bool TraceSession::Start(
     reportedDroppedCount_ = 0;
     writerThread_ = std::thread(&TraceSession::WriterLoop, this);
     readerThread_ = std::thread(&TraceSession::ReaderLoop, this);
+    if (footerEnabled_) {
+        footerThread_ = std::thread(&TraceSession::FooterLoop, this);
+    }
     return true;
 }
 
@@ -395,6 +403,9 @@ void TraceSession::Stop() {
     if (writerThread_.joinable()) {
         writerThread_.join();
     }
+    if (footerThread_.joinable()) {
+        footerThread_.join();
+    }
     PrintSummary();
     ReleaseLocalRing();
     if (outputFile_) {
@@ -412,6 +423,9 @@ void TraceSession::Drain() {
     if (writerThread_.joinable()) {
         writerThread_.join();
     }
+    if (footerThread_.joinable()) {
+        footerThread_.join();
+    }
     PrintSummary();
     ReleaseLocalRing();
     if (outputFile_) {
@@ -427,7 +441,9 @@ void TraceSession::ReaderLoop() {
             0);
         if (droppedCount > reportedDroppedCount_) {
             reportedDroppedCount_ = droppedCount;
-            fprintf(stderr, "[!] Trace events dropped: %u\n", reportedDroppedCount_);
+            if (!footerEnabled_) {
+                fprintf(stderr, "[!] Trace events dropped: %u\n", reportedDroppedCount_);
+            }
         }
     };
 
@@ -519,9 +535,21 @@ void TraceSession::WriterLoop() {
 }
 
 void TraceSession::RenderEvent(const TraceEvent& event) {
-    stats_.Record(CurrentHookName(event));
-    if (!quiet_) {
-        RenderTraceEventText(std::cout, event, colorEnabled_);
+    std::string hookName = CurrentHookName(event);
+    {
+        std::lock_guard<std::mutex> lock(consoleMutex_);
+        stats_.Record(hookName);
+        if (!quiet_ || footerEnabled_) {
+            if (footerEnabled_) {
+                EraseFooter();
+            }
+            if (!quiet_) {
+                RenderTraceEventText(std::cout, event, colorEnabled_);
+            }
+            if (footerEnabled_) {
+                DrawFooter();
+            }
+        }
     }
     if (outputFile_.is_open()) {
         if (outputFormat_ == TraceOutputFormat::Jsonl) {
@@ -553,10 +581,59 @@ void TraceSession::PrintSummary() {
         return;
     }
     summaryPrinted_ = true;
+    if (footerDrawn_) {
+        std::cout << "\r\x1b[K" << std::flush;
+        footerDrawn_ = false;
+    }
     if (localRing_) {
         stats_.dropped = (uint32_t)_InterlockedCompareExchange(&localRing_->droppedEvents, 0, 0);
     }
     double elapsed = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - startTime_).count();
     fprintf(stderr, "%s", FormatSummary(stats_, elapsed).c_str());
+}
+
+size_t TraceSession::ConsoleWidth() {
+    CONSOLE_SCREEN_BUFFER_INFO info;
+    if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &info)) {
+        int width = info.srWindow.Right - info.srWindow.Left + 1;
+        if (width > 0) {
+            return (size_t)width;
+        }
+    }
+    return 80;
+}
+
+void TraceSession::EraseFooter() {
+    if (footerDrawn_) {
+        std::cout << "\r\x1b[K";
+        footerDrawn_ = false;
+    }
+}
+
+void TraceSession::DrawFooter() {
+    if (localRing_) {
+        stats_.dropped = (uint32_t)_InterlockedCompareExchange(&localRing_->droppedEvents, 0, 0);
+    }
+    double elapsed = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - startTime_).count();
+    size_t width = ConsoleWidth();
+    std::string line = FormatStatusLine(stats_, elapsed, width);
+    if (colorEnabled_) {
+        if (width > line.size()) {
+            line.append(width - line.size(), ' ');
+        }
+        std::cout << "\x1b[7m" << line << "\x1b[0m" << std::flush;
+    } else {
+        std::cout << line << std::flush;
+    }
+    footerDrawn_ = true;
+}
+
+void TraceSession::FooterLoop() {
+    while (WaitForSingleObject(stopEvent_, 250) == WAIT_TIMEOUT) {
+        std::lock_guard<std::mutex> lock(consoleMutex_);
+        EraseFooter();
+        DrawFooter();
+    }
 }

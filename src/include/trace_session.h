@@ -30,6 +30,7 @@ struct TraceOutputOptions {
     std::wstring outputPath;
     bool quiet;
     TraceColorMode color = TraceColorMode::Auto;
+    TraceColorMode status = TraceColorMode::Auto;
 };
 
 class TraceSession {
@@ -57,6 +58,10 @@ private:
     void RenderEvent(const TraceEvent& event);
     void PrintSummary();
     void EnableVtMode();
+    void DrawFooter();
+    void EraseFooter();
+    void FooterLoop();
+    size_t ConsoleWidth();
     static std::string CurrentHookName(const TraceEvent& event);
 
     HANDLE mappingHandle_;
@@ -76,12 +81,16 @@ private:
     TraceOutputFormat outputFormat_;
     bool quiet_;
     bool colorEnabled_;
+    bool footerEnabled_;
+    bool footerDrawn_;
     uint32_t reportedDroppedCount_;
     HandlePathTracker handleTracker_;
     TraceStats stats_;
     std::chrono::steady_clock::time_point startTime_;
     bool started_;
     bool summaryPrinted_;
+    std::mutex consoleMutex_;
+    std::thread footerThread_;
     RemoteTrampoline setEventBypass_;
     RemoteTrampoline readMemoryBypass_;
 };

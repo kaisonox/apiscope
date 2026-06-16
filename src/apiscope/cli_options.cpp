@@ -222,6 +222,24 @@ CommandLineOptions ParseCommandLine(
                 }
                 continue;
             }
+            if (argument == L"--status") {
+                if (++index >= argc) {
+                    options.error = "--status requires auto, always, or never";
+                    return options;
+                }
+                std::wstring value = argv[index];
+                if (value == L"auto") {
+                    options.output.status = TraceColorMode::Auto;
+                } else if (value == L"always") {
+                    options.output.status = TraceColorMode::Always;
+                } else if (value == L"never") {
+                    options.output.status = TraceColorMode::Never;
+                } else {
+                    options.error = "--status requires auto, always, or never";
+                    return options;
+                }
+                continue;
+            }
             options.error = "Unknown command option";
             return options;
         }
@@ -289,4 +307,5 @@ void PrintUsage() {
     printf("  -o, --output <path>     Tee events to a file\n");
     printf("  -q, --quiet             Suppress terminal event rendering\n");
     printf("      --color <mode>      Colorize terminal output: auto, always, never\n");
+    printf("      --status <mode>     Live status footer: auto, always, never\n");
 }
