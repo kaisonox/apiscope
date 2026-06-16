@@ -5,6 +5,8 @@
 #include "trace_correlator.h"
 #include "trace_protocol.h"
 #include "trace_ring.h"
+#include "trace_stats.h"
+#include <chrono>
 #include <condition_variable>
 #include <deque>
 #include <fstream>
@@ -17,10 +19,17 @@ enum class TraceOutputFormat {
     Jsonl,
 };
 
+enum class TraceColorMode {
+    Auto,
+    Always,
+    Never,
+};
+
 struct TraceOutputOptions {
     TraceOutputFormat format;
     std::wstring outputPath;
     bool quiet;
+    TraceColorMode color = TraceColorMode::Auto;
 };
 
 class TraceSession {
@@ -46,6 +55,9 @@ private:
     void ReaderLoop();
     void WriterLoop();
     void RenderEvent(const TraceEvent& event);
+    void PrintSummary();
+    void EnableVtMode();
+    static std::string CurrentHookName(const TraceEvent& event);
 
     HANDLE mappingHandle_;
     TraceRing* localRing_;
@@ -63,8 +75,13 @@ private:
     std::ofstream outputFile_;
     TraceOutputFormat outputFormat_;
     bool quiet_;
+    bool colorEnabled_;
     uint32_t reportedDroppedCount_;
     HandlePathTracker handleTracker_;
+    TraceStats stats_;
+    std::chrono::steady_clock::time_point startTime_;
+    bool started_;
+    bool summaryPrinted_;
     RemoteTrampoline setEventBypass_;
     RemoteTrampoline readMemoryBypass_;
 };

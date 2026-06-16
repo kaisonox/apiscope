@@ -4,7 +4,9 @@
 #include "process_manager.h"
 #include "trace_renderer.h"
 #include <intrin.h>
+#include <io.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <iostream>
 
 static const size_t TRACE_EVENT_QUEUE_CAPACITY = 4096;
@@ -41,7 +43,10 @@ TraceSession::TraceSession()
       readerFinished_(false),
       outputFormat_(TraceOutputFormat::Text),
       quiet_(false),
+      colorEnabled_(false),
       reportedDroppedCount_(0),
+      started_(false),
+      summaryPrinted_(false),
       setEventBypass_(),
       readMemoryBypass_() {
 }
@@ -262,6 +267,18 @@ bool TraceSession::Start(
         return false;
     }
 
+    bool stdoutTty = _isatty(_fileno(stdout)) != 0;
+    bool noColorEnv = getenv("NO_COLOR") != nullptr;
+    colorEnabled_ = outputOptions.color == TraceColorMode::Always ||
+        (outputOptions.color == TraceColorMode::Auto && stdoutTty && !noColorEnv);
+    if (colorEnabled_) {
+        EnableVtMode();
+    }
+    stats_ = TraceStats();
+    startTime_ = std::chrono::steady_clock::now();
+    started_ = true;
+    summaryPrinted_ = false;
+
     if (!CreateSharedRing(targetProcess)) {
         return false;
     }
@@ -378,6 +395,7 @@ void TraceSession::Stop() {
     if (writerThread_.joinable()) {
         writerThread_.join();
     }
+    PrintSummary();
     ReleaseLocalRing();
     if (outputFile_) {
         outputFile_.flush();
@@ -394,6 +412,7 @@ void TraceSession::Drain() {
     if (writerThread_.joinable()) {
         writerThread_.join();
     }
+    PrintSummary();
     ReleaseLocalRing();
     if (outputFile_) {
         outputFile_.flush();
@@ -500,8 +519,9 @@ void TraceSession::WriterLoop() {
 }
 
 void TraceSession::RenderEvent(const TraceEvent& event) {
+    stats_.Record(CurrentHookName(event));
     if (!quiet_) {
-        RenderTraceEventText(std::cout, event);
+        RenderTraceEventText(std::cout, event, colorEnabled_);
     }
     if (outputFile_.is_open()) {
         if (outputFormat_ == TraceOutputFormat::Jsonl) {
@@ -510,4 +530,33 @@ void TraceSession::RenderEvent(const TraceEvent& event) {
             RenderTraceEventText(outputFile_, event);
         }
     }
+}
+
+std::string TraceSession::CurrentHookName(const TraceEvent& event) {
+    const char* base = reinterpret_cast<const char*>(event.payload);
+    std::string name(base, event.header.moduleNameLength);
+    name.push_back('!');
+    name.append(base + event.header.moduleNameLength, event.header.apiNameLength);
+    return name;
+}
+
+void TraceSession::EnableVtMode() {
+    HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD mode = 0;
+    if (handle != INVALID_HANDLE_VALUE && GetConsoleMode(handle, &mode)) {
+        SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+    }
+}
+
+void TraceSession::PrintSummary() {
+    if (!started_ || summaryPrinted_) {
+        return;
+    }
+    summaryPrinted_ = true;
+    if (localRing_) {
+        stats_.dropped = (uint32_t)_InterlockedCompareExchange(&localRing_->droppedEvents, 0, 0);
+    }
+    double elapsed = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - startTime_).count();
+    fprintf(stderr, "%s", FormatSummary(stats_, elapsed).c_str());
 }

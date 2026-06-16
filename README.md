@@ -68,7 +68,9 @@ export matching is case-sensitive.
 ```
 
 Terminal events remain readable while `--output` optionally tees text or JSONL
-to a file. `--quiet` suppresses the terminal event mirror.
+to a file. `--quiet` suppresses the terminal event mirror. `--color
+auto|always|never` controls terminal color (default `auto`: on for a TTY, off
+when piped or under `NO_COLOR`); color never appears in `--output` files.
 
 ```text
 [*] ntdll.dll!NtWriteFile ----------
@@ -92,7 +94,8 @@ encodings (pointers and statuses render as `0x` hex strings).
 
 Press Ctrl+C or Ctrl+Break to restore active hooks, release remote
 instrumentation, and detach. The target continues running. On natural exit,
-ApiScope prints the target status in decimal and hexadecimal.
+ApiScope prints the target status in decimal and hexadecimal, followed by a
+session summary (events, drops, and per-hook counts) on stderr.
 
 ## File Paths And Handle Correlation
 

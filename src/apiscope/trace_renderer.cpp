@@ -6,6 +6,19 @@
 #include <string>
 #include <vector>
 
+static const char* const kColorReset = "\x1b[0m";
+static const char* const kColorApi = "\x1b[36;1m";  // cyan, bold
+static const char* const kColorOk = "\x1b[32m";     // green
+static const char* const kColorError = "\x1b[31m";  // red
+static const char* const kColorPath = "\x1b[32m";   // green
+static const char* const kColorDim = "\x1b[2m";     // dim
+
+static void PutColor(std::ostream& output, bool useColor, const char* code) {
+    if (useColor) {
+        output << code;
+    }
+}
+
 struct TraceFieldView {
     TraceFieldHeader header;
     std::string name;
@@ -308,7 +321,7 @@ static void RenderTextLabel(std::ostream& output, const std::string& name, size_
 // A captured byte buffer decomposes into parallel "<name>_hex", "<name>_ascii",
 // "<name>_size", and "<name>_status" lines. The suffixes mirror the JSON
 // sub-keys (see docs/SCHEMA.md) so the two formats stay aligned.
-static void RenderBytesText(std::ostream& output, const TraceFieldView& field, size_t labelWidth) {
+static void RenderBytesText(std::ostream& output, const TraceFieldView& field, size_t labelWidth, bool useColor) {
     TraceBytesHeader bytes = ReadBytesHeader(field.value);
     const BYTE* preview = field.value + sizeof(bytes);
     bool truncated = bytes.captured < bytes.requested;
@@ -331,14 +344,17 @@ static void RenderBytesText(std::ostream& output, const TraceFieldView& field, s
     output << bytes.captured << " of " << bytes.requested << " bytes\n";
 
     RenderTextLabel(output, field.name + "_status", labelWidth);
-    output << HexStatus(bytes.captureStatus) << "\n";
+    PutColor(output, useColor, bytes.captureStatus >= 0 ? kColorOk : kColorError);
+    output << HexStatus(bytes.captureStatus);
+    PutColor(output, useColor, kColorReset);
+    output << "\n";
 }
 
 bool IsValidTraceEvent(const TraceEvent& event, size_t bytesReceived) {
     return ParseTraceEvent(event, bytesReceived, nullptr, nullptr, nullptr);
 }
 
-void RenderTraceEventText(std::ostream& output, const TraceEvent& event) {
+void RenderTraceEventText(std::ostream& output, const TraceEvent& event, bool useColor) {
     std::string moduleName;
     std::string apiName;
     std::vector<TraceFieldView> fields;
@@ -347,16 +363,29 @@ void RenderTraceEventText(std::ostream& output, const TraceEvent& event) {
     }
 
     size_t labelWidth = TextLabelWidth(fields, event);
-    output << "\n[*] " << moduleName << "!" << apiName << " ----------\n";
+    output << "\n[*] ";
+    PutColor(output, useColor, kColorApi);
+    output << moduleName << "!" << apiName;
+    PutColor(output, useColor, kColorReset);
+    output << " ----------\n";
     RenderTextLabel(output, "timestamp", labelWidth);
-    output << FormatTimestamp(event.header.timestamp100ns) << "\n";
+    PutColor(output, useColor, kColorDim);
+    output << FormatTimestamp(event.header.timestamp100ns);
+    PutColor(output, useColor, kColorReset);
+    output << "\n";
     RenderTextLabel(output, "thread_id", labelWidth);
-    output << event.header.threadId << "\n";
+    PutColor(output, useColor, kColorDim);
+    output << event.header.threadId;
+    PutColor(output, useColor, kColorReset);
+    output << "\n";
     RenderTextLabel(output, "sequence", labelWidth);
-    output << event.header.sequence << "\n";
+    PutColor(output, useColor, kColorDim);
+    output << event.header.sequence;
+    PutColor(output, useColor, kColorReset);
+    output << "\n";
     for (const TraceFieldView& field : fields) {
         if (field.header.type == TraceFieldBytes) {
-            RenderBytesText(output, field, labelWidth);
+            RenderBytesText(output, field, labelWidth, useColor);
             continue;
         }
         RenderTextLabel(output, field.name, labelWidth);
@@ -379,11 +408,17 @@ void RenderTraceEventText(std::ostream& output, const TraceEvent& event) {
         case TraceFieldBoolean:
             output << (*field.value ? "true" : "false");
             break;
-        case TraceFieldStatus:
-            output << HexStatus((NTSTATUS)ReadUInt32(field.value));
+        case TraceFieldStatus: {
+            NTSTATUS status = (NTSTATUS)ReadUInt32(field.value);
+            PutColor(output, useColor, status >= 0 ? kColorOk : kColorError);
+            output << HexStatus(status);
+            PutColor(output, useColor, kColorReset);
             break;
+        }
         case TraceFieldWideString:
+            PutColor(output, useColor, kColorPath);
             output << WideToUtf8(field.value, field.header.valueSize);
+            PutColor(output, useColor, kColorReset);
             break;
         default:
             output << "type_" << (uint32_t)field.header.type << " "

@@ -204,6 +204,24 @@ CommandLineOptions ParseCommandLine(
                 options.output.quiet = true;
                 continue;
             }
+            if (argument == L"--color") {
+                if (++index >= argc) {
+                    options.error = "--color requires auto, always, or never";
+                    return options;
+                }
+                std::wstring value = argv[index];
+                if (value == L"auto") {
+                    options.output.color = TraceColorMode::Auto;
+                } else if (value == L"always") {
+                    options.output.color = TraceColorMode::Always;
+                } else if (value == L"never") {
+                    options.output.color = TraceColorMode::Never;
+                } else {
+                    options.error = "--color requires auto, always, or never";
+                    return options;
+                }
+                continue;
+            }
             options.error = "Unknown command option";
             return options;
         }
@@ -270,4 +288,5 @@ void PrintUsage() {
     printf("  -f, --format <format>   File output format: text or jsonl\n");
     printf("  -o, --output <path>     Tee events to a file\n");
     printf("  -q, --quiet             Suppress terminal event rendering\n");
+    printf("      --color <mode>      Colorize terminal output: auto, always, never\n");
 }
