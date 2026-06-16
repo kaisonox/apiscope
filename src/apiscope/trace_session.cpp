@@ -492,6 +492,9 @@ void TraceSession::WriterLoop() {
             eventQueue_.pop_front();
         }
         queueNotFull_.notify_one();
+        handleTracker_.Observe(event);
+        handleTracker_.Annotate(&event);
+        handleTracker_.Evict(event);
         RenderEvent(event);
     }
 }

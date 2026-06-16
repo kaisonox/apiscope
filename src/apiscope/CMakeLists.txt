@@ -12,6 +12,7 @@ set(APISCOPE_SOURCES
     instruction_decoder.cpp
     trace_renderer.cpp
     trace_session.cpp
+    trace_correlator.cpp
     memory_utils.cpp
 )
 
@@ -23,6 +24,7 @@ set(APISCOPE_HEADERS
     ../include/trace_ring.h
     ../include/trace_renderer.h
     ../include/trace_session.h
+    ../include/trace_correlator.h
     ../include/hook_manager.h
     ../include/debug_session.h
     ../include/api_hook_descriptor.h

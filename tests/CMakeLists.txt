@@ -100,6 +100,21 @@ set_target_properties(test_trace_transport PROPERTIES
 )
 add_test(NAME trace_transport COMMAND test_trace_transport)
 
+add_executable(test_trace_correlator
+    test_trace_correlator.cpp
+    ../src/apiscope/trace_correlator.cpp
+    ../src/apiscope/trace_renderer.cpp
+    ../src/apiscope-hooks/trace_transport.cpp
+    ../src/apiscope/memory_utils.cpp
+)
+target_include_directories(test_trace_correlator PRIVATE
+    ../src/include
+)
+set_target_properties(test_trace_correlator PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+add_test(NAME trace_correlator COMMAND test_trace_correlator)
+
 add_executable(test_delayed_bcrypt test_delayed_bcrypt.cpp)
 target_link_libraries(test_delayed_bcrypt PRIVATE kernel32)
 set_target_properties(test_delayed_bcrypt PROPERTIES

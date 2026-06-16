@@ -94,6 +94,34 @@ Press Ctrl+C or Ctrl+Break to restore active hooks, release remote
 instrumentation, and detach. The target continues running. On natural exit,
 ApiScope prints the target status in decimal and hexadecimal.
 
+## File Paths And Handle Correlation
+
+`NtCreateFile`, `NtOpenFile`, and `NtOpenKey` resolve the target `path` from
+`OBJECT_ATTRIBUTES` and report the resulting handle. ApiScope records each
+successful open and annotates later operations on the same handle — reads,
+writes, registry value access, and the matching `NtClose` — with the resolved
+`path`, so activity is readable without manually tracking handles. `NtClose`
+also evicts the handle, and relative opens are resolved through a previously
+seen `root_directory` handle.
+
+```text
+[*] ntdll.dll!NtCreateFile ----------
+    sequence          : 2
+    path              : test_file.txt
+    file_handle       : 0x000000000000008C
+    result            : 0x00000000
+
+[*] ntdll.dll!NtReadFile ----------
+    sequence       : 3
+    file_handle    : 0x000000000000008C
+    buffer_ascii   : Hello, ApiScope!
+    result         : 0x00000000
+    path           : test_file.txt
+```
+
+The `path` on read and write events is correlated from the handle, not observed
+on the call itself.
+
 ## Adding A Hook
 
 Each hook is one file under `src/apiscope-hooks/hooks/` and declares its source
@@ -225,6 +253,8 @@ tests/                 Unit and runtime test targets
 - The debugger may require elevation for protected or elevated targets.
 - Unsupported trampoline relocation fails closed.
 - Ordinal export forwarders are not supported.
+- Handle-to-path correlation evicts on `ntdll.dll!NtClose` when that hook is
+  active; without it, a closed handle that is reused keeps its previous path.
 - The manual mapper is specific to the import-free hook image.
 - If ApiScope is forcibly terminated, `DebugSetProcessKillOnExit(FALSE)` keeps
   the target alive, but hooks and mapped instrumentation remain resident until

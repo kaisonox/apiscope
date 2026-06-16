@@ -2,6 +2,7 @@
 
 #include "common.h"
 #include "hook_manager.h"
+#include "trace_correlator.h"
 #include "trace_protocol.h"
 #include "trace_ring.h"
 #include <condition_variable>
@@ -63,6 +64,7 @@ private:
     TraceOutputFormat outputFormat_;
     bool quiet_;
     uint32_t reportedDroppedCount_;
+    HandlePathTracker handleTracker_;
     RemoteTrampoline setEventBypass_;
     RemoteTrampoline readMemoryBypass_;
 };
