@@ -4,7 +4,7 @@
 
 static const uint32_t TRACE_RING_MAGIC = 0x474E4952;
 static const uint16_t TRACE_RING_VERSION = 1;
-static const uint32_t TRACE_RING_CAPACITY = 4096;
+static const uint32_t TRACE_RING_CAPACITY = 16384;
 
 static_assert(
     (TRACE_RING_CAPACITY & (TRACE_RING_CAPACITY - 1)) == 0,

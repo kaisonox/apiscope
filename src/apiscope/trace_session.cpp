@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <iostream>
 
-static const size_t TRACE_EVENT_QUEUE_CAPACITY = 4096;
+static const size_t TRACE_EVENT_QUEUE_CAPACITY = 16384;
 static const size_t TRACE_RING_READ_BATCH = 256;
 
 #pragma intrinsic(_InterlockedCompareExchange64)
