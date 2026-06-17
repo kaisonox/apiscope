@@ -1,7 +1,7 @@
 # ApiScope
 
-[![Build](https://github.com/sonx4444/apiscope/actions/workflows/build.yml/badge.svg)](https://github.com/sonx4444/apiscope/actions/workflows/build.yml)
-[![CodeQL](https://github.com/sonx4444/apiscope/actions/workflows/codeql.yml/badge.svg)](https://github.com/sonx4444/apiscope/actions/workflows/codeql.yml)
+[![Build](https://github.com/kaisonox/apiscope/actions/workflows/build.yml/badge.svg)](https://github.com/kaisonox/apiscope/actions/workflows/build.yml)
+[![CodeQL](https://github.com/kaisonox/apiscope/actions/workflows/codeql.yml/badge.svg)](https://github.com/kaisonox/apiscope/actions/workflows/codeql.yml)
 
 ApiScope is a Windows x64 research tool for tracing selected API calls in a
 new or running process. It follows DLL load events through the Windows debugger
